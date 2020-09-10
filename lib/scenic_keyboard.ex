@@ -2,6 +2,8 @@ defmodule Scenic.Keyboard do
   @moduledoc """
   The Keyboard component provides two styles of keyboard: a full querty keyboard and a numeric pad.
 
+  Originally forked from github.com/jerel/scenic_ui
+
   To use this component in your scene add it to a graph with ScenicUI.Keyboard.add_to_graph/3. You
   can use one of the provided keyboard layouts by passing `:default` or `:num_pad` as the first argument
   or you can call `Keyboard.default/0` or `Keyboard.num_pad/0` to fetch the configuration maps and modify
@@ -24,7 +26,6 @@ defmodule Scenic.Keyboard do
 
   alias Scenic.Graph
   alias Scenic.ViewPort
-  alias Scenic.Primitive.Style.Theme
   import Scenic.Primitives
   import Scenic.Components
 
@@ -74,7 +75,7 @@ defmodule Scenic.Keyboard do
   }
 
   # --------------------------------------------------------
-  def info(data) do
+  def info(_data) do
     """
     #{IO.ANSI.red()}The first argument to Keyboard.add_to_graph/2 must be `:default`, `:num_pad`, or a custom map (see Keyboard.default/0)
     #{IO.ANSI.yellow()}
@@ -120,16 +121,18 @@ defmodule Scenic.Keyboard do
         Map.put(acc, name, build_layout(%{state | layout: layout}, name))
       end)
 
+    graph = Map.get(layout, :default)
+
     state =
       Map.merge(state, %{
-        graph: Map.get(layout, :default) |> push_graph(),
+        graph: graph,
         layout: layout,
         shift: false,
         caps_lock: false,
         id: opts[:id] || :keyboard
       })
 
-    {:ok, state}
+    {:ok, state, push: graph}
   end
 
   @doc """
@@ -151,36 +154,35 @@ defmodule Scenic.Keyboard do
   end
 
   def filter_event({:key_up, :shift}, _, %{graph: g, layout: layout, shift: false} = state) do
-    graph = layout |> Map.get(:shift) |> push_graph()
+    graph = layout |> Map.get(:shift)
 
-    {:stop, %{state | graph: g, shift: true}}
+    {:halt, %{state | graph: g, shift: true}, push: graph}
   end
 
   def filter_event({:key_up, :shift}, _, %{graph: g, layout: layout, shift: true} = state) do
-    graph = layout |> Map.get(:default) |> push_graph()
+    graph = layout |> Map.get(:default)
 
-    {:stop, %{state | graph: g, shift: false}}
+    {:halt, %{state | graph: g, shift: false}, push: graph}
   end
 
-  def filter_event({:key_up, char} = evt, _, %{graph: graph, layout: layout, caps_lock: false} = state) do
-    graph = layout |> Map.get(:default) |> push_graph()
+  def filter_event({:key_up, _char} = evt, _, %{layout: layout, caps_lock: false} = state) do
+    graph = layout |> Map.get(:default)
 
-    {:continue, evt, %{state | graph: graph, shift: false}}
+    {:cont, evt, %{state | graph: graph, shift: false}, push: graph}
   end
 
   def filter_event({:key_up, _} = evt, _, state) do
-    {:continue, evt, state}
+    {:cont, evt, state}
   end
 
-  defp build_layout(%{keyboard: keyboard, layout: layout}, selected_layout) do
-    graph =
-      Graph.build(
-        font_size: keyboard.font_size,
-        translate: {0, Map.get(keyboard, :top, keyboard.c_height - keyboard.height)},
-        hidden: false
-      )
-      |> rect({keyboard.c_width, keyboard.height}, keyboard.style)
-      |> build_row(layout, keyboard, 0)
+  defp build_layout(%{keyboard: keyboard, layout: layout}, _selected_layout) do
+    Graph.build(
+      font_size: keyboard.font_size,
+      translate: {0, Map.get(keyboard, :top, keyboard.c_height - keyboard.height)},
+      hidden: false
+    )
+    |> rect({keyboard.c_width, keyboard.height}, keyboard.style)
+    |> build_row(layout, keyboard, 0)
   end
 
   defp build_row(graph, [], _, _), do: graph
